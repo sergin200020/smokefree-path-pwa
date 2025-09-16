@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmokeFree Path</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4CAF50">
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f1f8e9;
+            color: #333;
+            padding: 20px;
+            text-align: center;
+        }
+        .counter {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #2e7d32;
+            margin: 20px 0;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 8px;
+            margin: 10px;
+            cursor: pointer;
+        }
+        .setup, .main { display: none; }
+        .active { display: block; }
+        input, select {
+            padding: 10px;
+            margin: 10px 0;
+            width: 100%;
+            max-width: 300px;
+        }
+    </style>
+</head>
+<body>
+    <h1>SmokeFree Path 🌿</h1>
+
+    <!-- Настройка -->
+    <div id="setupScreen" class="setup active">
+        <h2>Настройка</h2>
+        <input type="number" id="packPrice" placeholder="Цена пачки (₽)" value="300">
+        <input type="number" id="cigarettes" placeholder="Сигарет в пачке" value="20">
+        <button onclick="saveSettings()">Начать путь к свободе!</button>
+    </div>
+
+    <!-- Главный экран -->
+    <div id="mainScreen" class="main">
+        <div class="counter" id="savingsDisplay">💰 0.00 ₽</div>
+        <div id="perMinuteDisplay">⏱️ 0.00 ₽/мин</div>
+        <div id="dayDisplay">День 1</div>
+        <button onclick="logSmoke()">Я только что выкурил(а) сигарету</button>
+        <button onclick="showStats()">Статистика</button>
+    </div>
+
+    <script>
+        let settings = JSON.parse(localStorage.getItem('settings')) || null;
+        let events = JSON.parse(localStorage.getItem('events')) || [];
+        let lastOpen = localStorage.getItem('lastOpen') || Date.now();
+        let totalSavings = parseFloat(localStorage.getItem('totalSavings') || '0');
+
+        if (!settings) {
+            document.getElementById('setupScreen').classList.add('active');
+            document.getElementById('mainScreen').classList.remove('active');
+        } else {
+            document.getElementById('setupScreen').classList.remove('active');
+            document.getElementById('mainScreen').classList.add('active');
+            startTimer();
+        }
+
+        function saveSettings() {
+            const packPrice = parseFloat(document.getElementById('packPrice').value) || 300;
+            const cigarettes = parseInt(document.getElementById('cigarettes').value) || 20;
+            settings = {
+                packPrice,
+                cigarettes,
+                costPerCigarette: packPrice / cigarettes
+            };
+            localStorage.setItem('settings', JSON.stringify(settings));
+            document.getElementById('setupScreen').classList.remove('active');
+            document.getElementById('mainScreen').classList.add('active');
+            lastOpen = Date.now();
+            localStorage.setItem('lastOpen', lastOpen);
+            startTimer();
+        }
+
+        function startTimer() {
+            const now = Date.now();
+            const minutesPassed = (now - lastOpen) / (1000 * 60);
+            const perMinute = calculateMinuteSavings();
+            totalSavings += minutesPassed * perMinute;
+            localStorage.setItem('totalSavings', totalSavings.toString());
+            localStorage.setItem('lastOpen', now.toString());
+
+            updateDisplay();
+
+            setInterval(() => {
+                totalSavings += perMinute;
+                localStorage.setItem('totalSavings', totalSavings.toString());
+                updateDisplay();
+            }, 60000);
+        }
+
+        function calculateMinuteSavings() {
+            if (events.length <= 3) return 0;
+            const baseline = events.slice(0, 3).reduce((sum, e) => sum + 1, 0) / 3;
+            const todaySmoked = events.filter(e => isSameDay(e.timestamp)).length;
+            const avoided = Math.max(0, Math.floor(baseline) - todaySmoked);
+            const perMinute = (avoided * settings.costPerCigarette) / 1440;
+            return perMinute;
+        }
+
+        function isSameDay(timestamp) {
+            const d1 = new Date(timestamp);
+            const d2 = new Date();
+            return d1.toDateString() === d2.toDateString();
+        }
+
+        function updateDisplay() {
+            document.getElementById('savingsDisplay').innerText = `💰 ${totalSavings.toFixed(2)} ₽`;
+            document.getElementById('perMinuteDisplay').innerText = `⏱️ ${calculateMinuteSavings().toFixed(2)} ₽/мин`;
+            const day = Math.floor((Date.now() - events[0]?.timestamp || Date.now()) / (1000 * 60 * 60 * 24)) + 1;
+            document.getElementById('dayDisplay').innerText = `День ${day}`;
+        }
+
+        function logSmoke() {
+            const cravingLevel = prompt("Насколько сильно вы хотели курить? (1-10)", "5");
+            const situation = prompt("В какой ситуации вы курили?", "после кофе");
+            if (!cravingLevel || !situation) return;
+
+            const event = {
+                timestamp: Date.now(),
+                cravingLevel: parseInt(cravingLevel),
+                situation: situation,
+                dayNumber: getCurrentDay()
+            };
+            events.push(event);
+            localStorage.setItem('events', JSON.stringify(events));
+            updateDisplay();
+        }
+
+        function getCurrentDay() {
+            if (events.length === 0) return 1;
+            const first = new Date(events[0].timestamp);
+            const now = new Date();
+            const diffTime = Math.abs(now - first);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays + 1;
+        }
+
+        function showStats() {
+            alert(`Всего записей: ${events.length}\nСэкономлено: ${totalSavings.toFixed(2)} ₽`);
+        }
+    </script>
+</body>
+</html>
